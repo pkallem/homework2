@@ -25,7 +25,7 @@ class ClassificationLoss(nn.Module):
         Returns:
             tensor, scalar loss
         """
-        return torch.nn.functional.cross_entropy(logits, target)
+        return nn.functional.cross_entropy(logits, target)
 
 
 class LinearClassifier(nn.Module):
@@ -43,6 +43,7 @@ class LinearClassifier(nn.Module):
         """
         super().__init__()
         self.fc = nn.Linear(3 * h * w, num_classes)
+        self._model_name = "linear"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -62,6 +63,7 @@ class MLPClassifier(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        hidden_dim: int = 128,
     ):
         """
         An MLP with a single hidden layer
@@ -70,12 +72,13 @@ class MLPClassifier(nn.Module):
             h: int, height of the input image
             w: int, width of the input image
             num_classes: int, number of classes
+            hidden_dim: int, dimension of the hidden layer
         """
         super().__init__()
-        hidden_dim = 128
         self.fc1 = nn.Linear(3 * h * w, hidden_dim)
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_dim, num_classes)
+        self._model_name = "mlp"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -96,6 +99,8 @@ class MLPClassifierDeep(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        hidden_dim: int = 128,
+        num_layers: int = 3,
     ):
         """
         An MLP with multiple hidden layers
@@ -104,18 +109,17 @@ class MLPClassifierDeep(nn.Module):
             h: int, height of image
             w: int, width of image
             num_classes: int
-
-        Hint - you can add more arguments to the constructor such as:
             hidden_dim: int, size of hidden layers
-            num_layers: int, number of hidden layers
+            num_layers: int, number of hidden layers (>= 2 for "deep")
         """
         super().__init__()
-        hidden_dim = 128
-        num_layers = 3  # default number of layers (including the hidden ones)
         self.fc_in = nn.Linear(3 * h * w, hidden_dim)
-        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 1)])
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 1)
+        ])
         self.relu = nn.ReLU()
         self.fc_out = nn.Linear(hidden_dim, num_classes)
+        self._model_name = "mlp_deep"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -138,24 +142,27 @@ class MLPClassifierDeepResidual(nn.Module):
         h: int = 64,
         w: int = 64,
         num_classes: int = 6,
+        hidden_dim: int = 128,
+        num_layers: int = 3,
     ):
         """
+        MLP with multiple hidden layers and residual connections
+
         Args:
             h: int, height of image
             w: int, width of image
             num_classes: int
-
-        Hint - you can add more arguments to the constructor such as:
             hidden_dim: int, size of hidden layers
-            num_layers: int, number of hidden layers
+            num_layers: int, number of residual blocks
         """
         super().__init__()
-        hidden_dim = 128
-        num_layers = 3  # default number of residual blocks
         self.fc_in = nn.Linear(3 * h * w, hidden_dim)
-        self.res_blocks = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers)])
+        self.res_blocks = nn.ModuleList([
+            nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers)
+        ])
         self.relu = nn.ReLU()
         self.fc_out = nn.Linear(hidden_dim, num_classes)
+        self._model_name = "mlp_deep_residual"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -196,17 +203,27 @@ def save_model(model):
     """
     Use this function to save your model in train.py
     """
-    for n, m in model_factory.items():
-        if isinstance(model, m):
-            return torch.save(model.state_dict(), Path(__file__).resolve().parent / f"{n}.th")
-    raise ValueError(f"Model type '{str(type(model))}' not supported")
+    from pathlib import Path
+
+    # Use the model's own name if available
+    model_name = getattr(model, "_model_name", None)
+    if model_name is None:
+        for n, m in model_factory.items():
+            if isinstance(model, m):
+                model_name = n
+                break
+    if model_name is None:
+        raise ValueError(f"Model type '{str(type(model))}' not supported")
+    torch.save(model.state_dict(), Path(__file__).resolve().parent / f"{model_name}.th")
 
 
 def load_model(model_name: str, with_weights: bool = False, **model_kwargs):
     """
     Called by the grader to load a pre-trained model by name
     """
+    from pathlib import Path
     r = model_factory[model_name](**model_kwargs)
+    r._model_name = model_name  # ensure the model's name attribute is set
     if with_weights:
         model_path = Path(__file__).resolve().parent / f"{model_name}.th"
         assert model_path.exists(), f"{model_path.name} not found"

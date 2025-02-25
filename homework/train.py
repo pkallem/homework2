@@ -65,8 +65,13 @@ def train(
             optimizer.zero_grad()
             outputs = model(img)
             loss = loss_func(outputs, label)
+
+            # Log training loss every iteration
+            logger.add_scalar("train_loss", loss.item(), global_step)
+
             loss.backward()
             optimizer.step()
+
             train_acc = compute_accuracy(outputs, label).item()
             metrics["train_acc"].append(train_acc)
 
@@ -117,7 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=2024)
 
-    # optional: additional model hyperparamters
+    # optional: additional model hyperparameters
+    # parser.add_argument("--hidden_dim", type=int, default=128)
     # parser.add_argument("--num_layers", type=int, default=3)
 
     # pass all arguments to train
